@@ -1,0 +1,474 @@
+---
+title: "Juegos Olímpicos"
+logo: "complementario/logo.png"
+output:
+  flexdashboard::flex_dashboard:
+    css: "complementario/layout.css"
+    orientation: columns
+    source_code: embed
+    theme:
+      version: 4
+      bg: "#FFFFFF" 
+      fg: "#000000"
+      primary: "#008CBA"
+      navbar-bg: "#EF4135"
+      base_font:
+        google: Prompt
+      heading_font:
+        google: Sen
+      code_font:
+        google:
+          family: JetBrains Mono
+          local: false
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(tidyverse)
+library(knitr)
+```
+
+# Introducción {.storyboard}
+
+### Datos 
+
+En este proyecto, voy a trabajar con datos sobre los Juegos Olímpicos de París 2024, disponibles en Kaggle (https://www.kaggle.com/datasets/piterfm/paris-2024-olympic-summer-games?resource=download&select=medals.csv). Para este análisis, utilizaré tres tablas diferentes: athletes.csv, medals.csv y events.csv.
+
+* La tabla athletes.csv contiene información relevante sobre los deportistas, como su nombre, género, país, altura, peso, fecha de nacimiento, las disciplinas en las que participan y el país donde residen. Esta tabla permite conocer las características de los atletas y su participación en las distintas disciplinas de los Juegos Olímpicos.
+
+* La tabla medals.csv registra las medallas obtenidas por los atletas, especificando el tipo de medalla (oro, plata o bronce), las fechas en que se entregaron y los eventos en los que se consiguieron. Esta tabla es clave para analizar la distribución de medallas entre países y géneros a lo largo de los Juegos Olímpicos.
+
+* La tabla events.csv describe los eventos deportivos en los que los atletas participaron, y se complementa con las medallas obtenidas en cada uno de esos eventos.
+
+### Importación de datos
+
+```{r echo=TRUE}
+# Limpiar el entorno de trabajo, eliminando todos los objetos existentes
+rm(list = ls())
+
+# Cargar las bibliotecas necesarias
+library(flexdashboard)  # Para dashboards interactivos
+library(tidyverse)      # Para manipulación de datos y visualización
+library(knitr)          # Para la creación de informes
+library(shiny)          # Para aplicaciones interactivas
+library(bslib)          # Para personalización de la interfaz de Shiny
+library(DT)             # Para tablas interactivas
+library(plotly)         # Para visualización interactiva
+library(highcharter)    # Para gráficos interactivos
+library(ggplot2)        # Para gráficos estáticos
+library(leaflet)        # Para mapas interactivos
+library(rnaturalearth) # Para acceder a datos geográficos
+library(countrycode)    # Para conversiones entre códigos de países
+
+# Cargar los datos
+data_athletes = read_csv("data/athletes.csv")   # Cargar datos de atletas
+data_medals = read_csv("data/medals.csv")       # Cargar datos de medallas
+data_events = read_csv("data/events.csv")       # Cargar datos de eventos
+```
+
+
+### Depuración de datos
+
+```{r echo=TRUE}
+# Procesar la fecha de nacimiento y calcular la edad de los atletas
+data_athletes$birth_date = as.Date(data_athletes$birth_date, format = "%Y-%m-%d")  # Convertir fecha a formato Date
+data_athletes$age = as.numeric(difftime(Sys.Date(), data_athletes$birth_date, units = "weeks")) %/% 52  # Calcular edad en años
+
+# Añadir código de país a los datos de los atletas utilizando la función 'countrycode'
+data_athletes = data_athletes %>% 
+  mutate(country_code = countrycode(data_athletes$country_long, "country.name", "iso3c"))
+
+# Limpiar la variable 'disciplines' (disciplinas de los atletas) eliminando corchetes y comillas
+data_athletes$disciplines = gsub("\\[|\\]", "", data_athletes$disciplines)  # Eliminar corchetes
+data_athletes$disciplines = gsub("'", "", data_athletes$disciplines)  # Eliminar comillas simples
+data_athletes$disciplines = sub(".*,\\s*(.*)", "\\1", data_athletes$disciplines)  # Dejar solo la última disciplina en caso de que haya varias
+
+# Limpiar la variable 'events' (eventos) eliminando caracteres no deseados
+data_athletes = data_athletes %>% 
+  mutate(events = str_remove_all(events, "[\\[\\]']"))  # Eliminar corchetes y comillas
+
+# Añadir código de país a los datos de las medallas
+data_medals = data_medals %>% 
+  mutate(country_code = countrycode(data_medals$country_long, "country.name", "iso3c"))
+
+# Establecer NA en la variable 'height' (altura) para los valores menores a 120
+data_athletes = data_athletes %>%
+  mutate(height = ifelse(height < 120, NA, height))  # Si la altura es menor a 120 cm, se asigna NA
+
+# Establecer NA en la variable 'weight' (peso) para los valores menores a 20
+data_athletes = data_athletes %>%
+  mutate(weight = ifelse(weight < 20, NA, weight)) # Si el peso es menor a 20 kg, se asigna NA
+```
+
+# Global {data-orientation=rows}
+
+## Fila 1 
+
+### Cuadro
+```{r}
+
+# Obtener las disciplinas únicas de los atletas
+disciplines_unique = data_athletes %>%
+  distinct(disciplines) %>%  # Extraer disciplinas únicas
+  select(disciplines)  # Seleccionar solo la columna 'disciplines'
+
+# Extraer los nombres de las disciplinas disponibles en una lista
+deportes_disponibles = disciplines_unique %>% 
+  pull(disciplines)  # Extraer los valores de la columna 'disciplines' en un vector
+
+countries_unique=data_athletes %>% 
+  distinct(country_code)
+valueBox(nrow(countries_unique),
+         caption="Países", 
+         icon="fa-solid fa-earth-europe",
+         color="#F8766D")
+```
+
+### Cuadro
+```{r}
+names_athletes_unique=data_athletes %>%
+  distinct(name) %>% 
+  select(name) 
+valueBox(nrow(names_athletes_unique), 
+         caption="Atletas", 
+         icon="fa-solid fa-users-line",
+         color="#00B0F6")
+```
+
+### Cuadro
+```{r}
+valueBox(19,
+         caption="Días", 
+         icon="fa-regular fa-clock",
+         color="#7CAE00")
+```
+
+### Cuadro
+```{r}
+disciplines_unique=data_athletes %>%
+  distinct(disciplines) %>% 
+  select(disciplines) 
+valueBox(nrow(disciplines_unique),
+         caption="Deportes", 
+         icon="fa-solid fa-person-running",
+         color="#C77CFF")
+```
+
+### Cuadro
+
+```{r}
+events_unique=data_athletes %>% 
+  distinct(events) 
+valueBox(nrow(events_unique), 
+         caption="Disciplinas", 
+         icon="fa-solid fa-dumbbell",
+         color="#E76BF3")
+```
+
+## Fila 2
+
+### Mapa de paises participantes
+
+```{r}
+world = ne_countries(scale = "medium", returnclass = "sf")
+
+selected_countries = world %>%
+  filter(iso_a3_eh %in% countries_unique$country_code)
+
+leaflet() %>%
+  setView(lng = 0, lat = 20, zoom = 2) %>%  # lng: longitud, lat: latitud, zoom: nivel de zoom
+  addProviderTiles("CartoDB.Positron") %>%
+  addPolygons(data = selected_countries,
+              fillColor = "blue",
+              fillOpacity = 0.6,
+              color = "black",
+              weight = 1,
+              label = ~name_long) %>%
+  addLegend("bottomright", 
+            colors = "blue", 
+            labels = "Países Participantes",
+            title = "Leyenda")
+```
+
+###
+
+```{r}
+data_events %>%
+  dplyr::select(sport, event) %>% 
+  group_by(sport) %>% 
+  summarise(num_disciplinas = n()) %>%
+  arrange(desc(num_disciplinas)) %>% 
+  hchart(
+    type = "treemap", 
+    hcaes(x = sport, value = num_disciplinas, color = num_disciplinas)
+  ) %>%
+  hc_colorAxis(stops = color_stops(colors = c("white", "#007bff"))) %>%
+  hc_title(text = "Disciplinas por deporte") 
+```
+
+
+# Atletas {data-orientation=rows}
+
+## Fila 1 
+
+### 
+
+```{r}
+valueBox(round(mean(data_athletes$age, na.rm = TRUE)),
+         caption="años de media", 
+         icon="fa-solid fa-calendar-day",
+         color="#F8766D")
+```
+
+###
+
+```{r}
+valueBox(round(mean(data_athletes$height, na.rm = TRUE)),
+         caption="cm de media", 
+         icon="fa-solid fa-up-right-and-down-left-from-center",
+         color="#00B0F6")
+```
+
+### 
+
+```{r}
+valueBox(round(mean(data_athletes$weight, na.rm = TRUE)),
+         caption="kg de media", 
+         icon="fa-solid fa-weight-hanging",
+         color="#E76BF3")
+```
+
+## Fila 2
+
+### 
+
+```{r}
+data_athletes %>%
+  group_by(gender) %>%
+  summarise(Total = n()) %>%
+  mutate(Percentage = Total / sum(Total) * 100) %>%
+  hchart(
+    "pie", hcaes(x = gender, y = Total),
+    name = "Género",
+    tooltip = list(
+      pointFormat = "<b>{point.y}</b> ({point.percentage:.1f}%)"
+    ) 
+  ) %>% 
+  hc_title(text = "Distribución de Atletas por Género") %>% 
+  hc_colors(c("#1f77b4", "#ff7f0e"))
+```
+
+### 
+
+```{r}
+data_athletes %>% 
+  group_by(disciplines) %>% 
+  summarise(num_atletas = n()) %>% 
+  arrange(desc(num_atletas)) %>% 
+  hchart(
+    "column", 
+    hcaes(x = disciplines, y = num_atletas)
+  ) %>% 
+  hc_title(text = "Número de Atletas por Disciplina") %>%
+  hc_xAxis(title = list(text = "Disciplina")) %>%
+  hc_yAxis(title = list(text = "Número de Atletas")) %>%
+  hc_tooltip(pointFormat = "<b>{point.y}</b> atletas") %>%
+  hc_plotOptions(column = list(dataLabels = list(enabled = TRUE)))
+```
+
+## Fila 3
+
+### 
+
+```{r}
+data_athletes %>% 
+  group_by(country_long) %>% 
+  summarise(num_atletas = n()) %>% 
+  arrange(desc(num_atletas)) %>% 
+  slice(1:15) %>% 
+  hchart(
+    "column", 
+    hcaes(x = country_long, y = num_atletas)
+  ) %>% 
+  hc_title(text = "Países con más atletas") %>%
+  hc_xAxis(title = list(text = "Disciplina")) %>%
+  hc_yAxis(title = list(text = "Número de Atletas")) %>%
+  hc_tooltip(pointFormat = "<b>{point.y}</b> atletas") %>%
+  hc_plotOptions(column = list(dataLabels = list(enabled = TRUE)))
+```
+
+###
+
+```{r}
+medallas_por_pais <- data_medals %>% 
+  group_by(country_long, country_code) %>% 
+  summarise(total_medallas = n())
+
+hcmap("custom/world", 
+      data = medallas_por_pais, 
+      joinBy = c("iso-a3", "country_code"),  # Unir por código de país
+      value = "total_medallas",              # Variable a mapear
+      name = "Total de Medallas", 
+      dataLabels = list(enabled = TRUE, format = "{point.name}"), 
+      tooltip = list(pointFormat = "{point.name}: <b>{point.value} medallas</b>")
+) %>% 
+  hc_colorAxis(
+    min = 0,
+    stops = color_stops(colors = c("#f1eef6", "#045a8d"))  # Escala de colores
+  ) %>% 
+  hc_title(text = "Distribución de Medallas por País") %>% 
+  hc_subtitle(text = "Cantidad de medallas ganadas por país") %>% 
+  hc_legend(enabled = TRUE) %>% 
+  hc_mapNavigation(
+    enabled = TRUE,          # Activa el zoom y desplazamiento
+    enableMouseWheelZoom = TRUE,  # Permite zoom con la rueda del ratón
+    enableButtons = TRUE           # Muestra botones de zoom (+/-)
+  )
+```
+
+# Deporte {data-orientation=rows}
+
+## Col
+
+###
+
+```{r echo=FALSE}
+shinyApp(
+  ui = fluidPage(
+    titlePanel("Resumen por deporte"),
+    page_sidebar(
+      sidebar = sidebar(
+        selectInput("deporte", "Selecciona un Deporte:",
+                    choices = deportes_disponibles)
+      ),
+      fluidRow(
+        style = "height: 300px;",
+        column(6,
+               highchartOutput("grafico_atletas_especialidad",height = 300),
+        ),
+        column(6,
+               highchartOutput("grafico_meses",height = 300),
+        )
+      ),
+      fluidRow(
+        style = "height: 310px;",
+        column(6,
+               highchartOutput("grafico_tarta",height=300),
+        ),
+        column(6,
+               plotlyOutput("grafico_distribucion_altura",height=300),
+        )
+      ),
+      fluidRow(
+        column(12,
+               DTOutput("tabla_atletas",height=400)
+        )
+      )
+    )
+  ),
+  server = function(input, output) {
+    datos_atletas_filtrado= reactive({
+      data_athletes %>% 
+        filter(disciplines==input$deporte)
+    })
+    datos_medallas_filtrado= reactive({
+      data_medals %>% 
+        filter(discipline==input$deporte)
+    })
+    
+    output$grafico_meses = renderHighchart({
+      datos_medallas_filtrado() %>%
+        group_by(medal_date) %>%
+        summarise(total_medallas = n()) %>%
+        hchart(
+          "column", 
+          hcaes(x = medal_date, y = total_medallas)
+        ) %>%
+        hc_title(text = "Distribución de Medallas por Fecha") %>%
+        hc_xAxis(
+          title = list(text = "Fecha de Medalla"),
+          type = "datetime",  # Especificamos que el eje X es de tipo datetime
+          labels = list(
+            format = "{value:%d de %b}",  # Formato de fecha (día de mes en letras)
+            rotation = -45  # Rotamos las etiquetas del eje X para mayor legibilidad
+          )
+        ) %>%
+        hc_yAxis(
+          title = list(text = "Cantidad de Medallas")
+        ) %>%
+        hc_tooltip(
+          pointFormat = "<b>{point.y}</b> medallas en {point.x:%d de %b}"  # Formato del tooltip
+        ) %>%
+        hc_plotOptions(
+          column = list(dataLabels = list(enabled = TRUE))  # Muestra las etiquetas de los datos
+        )
+    })
+    
+    output$grafico_atletas_especialidad = renderHighchart({
+      datos_atletas_especialidad= datos_atletas_filtrado() %>% 
+        group_by(events) %>% 
+        summarise(num_atletas=n())
+      
+        hchart(datos_atletas_especialidad,
+          "bar", 
+          hcaes(x = events, y = num_atletas),
+        ) %>% 
+        hc_title(text = "Distribución atletas por disciplina") %>%
+        hc_xAxis(title = list(text = "Disciplina")) %>%
+        hc_yAxis(title = list(text = "Número de Atletas")) %>%
+        hc_tooltip(pointFormat = "<b>{point.y}</b> atletas") %>%
+        hc_plotOptions(column = list(dataLabels = list(enabled = TRUE)))
+    })
+    
+    output$grafico_tarta = renderHighchart({
+      datos_tarta=datos_atletas_filtrado() %>%
+        group_by(gender) %>%
+        summarise(Total = n()) %>%
+        mutate(Percentage = Total / sum(Total) * 100)
+      
+        hchart(datos_tarta,
+          "pie", hcaes(x = gender, y = Total),
+          name = "Género",
+          tooltip = list(
+            pointFormat = "<b>{point.y}</b> ({point.percentage:.1f}%)"
+          )
+        ) %>% 
+        hc_title(text = "Distribución de Atletas por Género") %>% 
+        hc_colors(c("#1f77b4", "#ff7f0e"))
+    }) 
+    
+    output$grafico_distribucion_altura = renderPlotly({
+      datos_altura=datos_atletas_filtrado() %>%
+        select(height, gender) %>% 
+        na.omit()
+      
+        ggplot(datos_altura, aes(x = height, fill = gender)) +
+        geom_density(alpha = 0.5) +
+        labs(
+          title = "Distribución de Densidad de la Altura por Género",
+          x = "Altura (cm)",
+          y = "Densidad",
+          fill = "Género"
+        ) +
+        scale_fill_manual(values = c("Male" = "#ff7f0e" , "Female" = "#1f77b4")) +
+        theme_minimal()
+    })
+    
+    output$tabla_atletas=renderDT({
+      datos_atletas_filtrado() %>% 
+        select(name_tv, age, height, country, disciplines, events) %>% 
+        arrange(country) %>% 
+        rename(
+          "Nombre" = name_tv,
+          "Edad" = age,
+          "Altura" = height,
+          "País" = country,
+          "Deporte" = disciplines,
+          "Disciplina" = events
+        )
+    })
+  }
+)
+```
+
